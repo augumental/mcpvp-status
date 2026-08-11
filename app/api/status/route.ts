@@ -1,7 +1,6 @@
 import { getStatus, POLL_INTERVAL_MS } from "@/lib/minecraft"
 
-// Always run this on the Node.js runtime (the MC query library uses net sockets)
-// and never statically cache the response.
+// Run on the Node.js runtime and never statically cache the response.
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 

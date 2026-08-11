@@ -1,34 +1,35 @@
-import { status } from "minecraft-server-util"
-
 /**
  * ---------------------------------------------------------------------------
  * MCPVP Minecraft server monitoring core
  * ---------------------------------------------------------------------------
- * This module is responsible for:
- *   1. Querying the Minecraft server (mcpvp.com) for its current MOTD.
- *   2. Detecting the "status" from that MOTD using a strict priority order.
- *   3. Caching the latest result at the module (server) level so that we make
- *      AT MOST one real Minecraft query per POLL_INTERVAL_MS, regardless of
- *      how many website visitors are connected. All clients read this cache.
+ * Responsibilities:
+ *   1. Query a public Minecraft status API (mcstatus.io) for mcpvp.com's MOTD.
+ *      Browsers cannot speak the raw Minecraft protocol, so we go through a
+ *      server-side fetch to a status API instead.
+ *   2. Detect the "status" from that MOTD using a strict priority order.
+ *   3. Cache the latest result at the module (server) level so we make AT MOST
+ *      one upstream request per POLL_INTERVAL_MS regardless of how many website
+ *      visitors are connected. Every client reads from this shared cache.
  *
- * Because Vercel serverless functions are short-lived, we cannot guarantee a
- * single always-on background process. Instead we use a module-scoped cache
- * with in-flight request de-duplication: the first request after the cache
- * expires performs the real query, and every other concurrent request awaits
- * the same promise. This achieves the same "don't hammer the server" goal in
- * a serverless-friendly way.
+ * Because serverless functions are short-lived, we use a module-scoped cache
+ * with in-flight request de-duplication rather than a single always-on daemon:
+ * the first request after the cache expires performs the real query, and all
+ * concurrent requests await the same promise. Same "don't hammer it" outcome,
+ * serverless-friendly.
  */
 
 // The Minecraft server we monitor.
 export const SERVER_HOST = "mcpvp.com"
-export const SERVER_PORT = 25565
+
+// Public status API. Returns MOTD, player counts, online state as JSON.
+const STATUS_API = `https://api.mcstatus.io/v2/status/java/${SERVER_HOST}`
 
 // How long a cached result is considered fresh. Defaults to 15 seconds and is
 // the single source of truth for the monitoring interval (backend-configurable).
 export const POLL_INTERVAL_MS = Number(process.env.MCPVP_POLL_INTERVAL_MS ?? 15_000)
 
-// Timeout for a single Minecraft query before we treat it as unreachable.
-const QUERY_TIMEOUT_MS = 5_000
+// Timeout for a single upstream query before we treat the server as unreachable.
+const QUERY_TIMEOUT_MS = 8_000
 
 export type ServerStatus = "UNLOCKED" | "SELECTIVE_WHITELIST" | "WHITELISTED" | "UNREACHABLE"
 
@@ -51,13 +52,13 @@ export interface StatusResult {
  * Determine the server status from a MOTD string.
  *
  * Priority (case-insensitive):
- *   1. Contains "unlocked"      -> UNLOCKED
+ *   1. Contains "unlocked"              -> UNLOCKED
  *   2. Contains "+" (and no "unlocked") -> SELECTIVE_WHITELIST
- *   3. Otherwise                -> WHITELISTED
+ *   3. Otherwise                        -> WHITELISTED
  *
- * Note: UNREACHABLE is handled separately (connection failure), never inferred
- * from an empty/missing MOTD here, so a temporary outage is never misreported
- * as WHITELISTED.
+ * UNREACHABLE is handled separately (connection failure) and is never inferred
+ * from an empty MOTD here, so a temporary outage is never misreported as
+ * WHITELISTED.
  */
 export function detectStatus(motd: string): Exclude<ServerStatus, "UNREACHABLE"> {
   const normalized = motd.toLowerCase()
@@ -73,24 +74,49 @@ let cache: StatusResult | null = null
 let cacheTime = 0
 let inFlight: Promise<StatusResult> | null = null
 
-/** Perform the actual network query to the Minecraft server. */
+/** Perform the actual network query to the public status API. */
 async function queryServer(): Promise<StatusResult> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS)
+
   try {
-    const response = await status(SERVER_HOST, SERVER_PORT, {
-      timeout: QUERY_TIMEOUT_MS,
-      enableSRV: true,
+    const res = await fetch(STATUS_API, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+      cache: "no-store",
     })
 
-    // motd.clean strips Minecraft color/formatting codes and gives plain text.
-    const motd = (response.motd?.clean ?? "").trim()
+    if (!res.ok) {
+      throw new Error(`Status API responded ${res.status}`)
+    }
+
+    const data = (await res.json()) as {
+      online: boolean
+      motd?: { clean?: string; raw?: string }
+      players?: { online?: number; max?: number }
+    }
+
+    // If the API reports the host itself as offline, treat as unreachable.
+    if (!data.online) {
+      return {
+        status: "UNREACHABLE",
+        motd: "",
+        online: false,
+        checkedAt: new Date().toISOString(),
+        error: "Server reported offline by status API",
+      }
+    }
+
+    // `clean` strips Minecraft color/formatting codes -> plain text MOTD.
+    const motd = (data.motd?.clean ?? "").replace(/\s+/g, " ").trim()
 
     return {
       status: detectStatus(motd),
       motd,
       online: true,
       players: {
-        online: response.players?.online ?? 0,
-        max: response.players?.max ?? 0,
+        online: data.players?.online ?? 0,
+        max: data.players?.max ?? 0,
       },
       checkedAt: new Date().toISOString(),
     }
@@ -103,6 +129,8 @@ async function queryServer(): Promise<StatusResult> {
       checkedAt: new Date().toISOString(),
       error: error instanceof Error ? error.message : "Unknown error",
     }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -132,4 +160,9 @@ export async function getStatus(): Promise<StatusResult> {
     })
 
   return inFlight
+}
+
+/** Expose remaining freshness so the API can advertise the next check time. */
+export function getCacheAgeMs(): number {
+  return cache ? Date.now() - cacheTime : POLL_INTERVAL_MS
 }
