@@ -24,11 +24,15 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  /* Brand crimson */
+  --color-crimson: var(--crimson);
+  --color-crimson-bright: var(--crimson-bright);
+
   /* Status semantic colors */
-  --color-status-unlocked: var(--status-unlocked);
-  --color-status-selective: var(--status-selective);
-  --color-status-whitelisted: var(--status-whitelisted);
-  --color-status-unreachable: var(--status-unreachable);
+  --color-status-green: oklch(0.72 0.19 150);
+  --color-status-yellow: oklch(0.83 0.17 90);
+  --color-status-red: oklch(0.62 0.24 22);
+  --color-status-gray: oklch(0.62 0.02 20);
 
   --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
@@ -39,20 +43,20 @@
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
 
-  --animate-blink: blink 1.4s ease-in-out infinite;
-  --animate-drift: drift 24s ease-in-out infinite alternate;
-  --animate-scan: scan 8s linear infinite;
-  --animate-modal-in: modal-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-fade-in: fade-in 0.5s ease-out both;
+  --animate-blink-dot: blink-dot 1.4s ease-in-out infinite;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-drift: drift 26s ease-in-out infinite alternate;
+  --animate-drift-alt: drift-alt 32s ease-in-out infinite alternate;
   --animate-status-pop: status-pop 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-toast-in: toast-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-modal-in: modal-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root {
   color-scheme: dark;
   --radius: 0.75rem;
 
-  /* Red-and-black cyberpunk palette (core colors + status accents) */
+  /* Red-and-black cyberpunk palette */
   --background: oklch(0.11 0.006 20);
   --foreground: oklch(0.97 0.004 20);
 
@@ -79,10 +83,9 @@
   --input: oklch(0.75 0.02 20 / 10%);
   --ring: oklch(0.58 0.22 22 / 55%);
 
-  --status-unlocked: oklch(0.72 0.19 150);
-  --status-selective: oklch(0.82 0.17 92);
-  --status-whitelisted: oklch(0.6 0.23 22);
-  --status-unreachable: oklch(0.62 0.02 20);
+  /* Brand crimson (raw values reused for glows/box-shadows) */
+  --crimson: oklch(0.5 0.2 22);
+  --crimson-bright: oklch(0.62 0.24 22);
 }
 
 @layer base {
@@ -105,8 +108,8 @@
 @utility glass {
   background: linear-gradient(
     155deg,
-    color-mix(in oklch, var(--card) 92%, white 8%),
-    color-mix(in oklch, var(--card) 100%, black 6%)
+    oklch(0.22 0.02 18 / 55%),
+    oklch(0.13 0.012 15 / 65%)
   );
   backdrop-filter: blur(22px) saturate(160%);
   -webkit-backdrop-filter: blur(22px) saturate(160%);
@@ -116,27 +119,67 @@
     0 10px 40px -12px oklch(0 0 0 / 60%);
 }
 
-@utility glass-strong {
+@utility glass-panel {
   background: linear-gradient(
     155deg,
-    oklch(0.2 0.02 18 / 85%),
-    oklch(0.12 0.012 15 / 92%)
+    oklch(0.2 0.02 18 / 60%),
+    oklch(0.12 0.012 15 / 72%)
   );
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid oklch(0.7 0.14 22 / 22%);
+  backdrop-filter: blur(32px) saturate(170%);
+  -webkit-backdrop-filter: blur(32px) saturate(170%);
+  border: 1px solid oklch(0.72 0.14 22 / 20%);
   box-shadow:
     0 1px 0 0 oklch(1 0 0 / 10%) inset,
-    0 0 0 1px oklch(0.6 0.2 22 / 8%),
-    0 30px 80px -20px oklch(0 0 0 / 80%);
+    0 0 0 1px oklch(0.6 0.2 22 / 6%),
+    0 24px 70px -22px oklch(0 0 0 / 80%);
+}
+
+@utility text-glow-crimson {
+  text-shadow:
+    0 0 24px oklch(0.6 0.24 22 / 45%),
+    0 0 60px oklch(0.55 0.22 22 / 25%);
+}
+
+/* Subtle horizontal scanlines overlay */
+@utility scanlines {
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      oklch(1 0 0 / 3%) 0px,
+      oklch(1 0 0 / 3%) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    opacity: 0.4;
+    mix-blend-mode: overlay;
+  }
+}
+
+/* Masked cyber grid for the ambient background */
+@utility grid-overlay {
+  background-image:
+    linear-gradient(to right, oklch(0.7 0.14 22 / 6%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.7 0.14 22 / 6%) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 45%, black 20%, transparent 80%);
 }
 
 /* ------------------------------------------------------------------ */
 /* Keyframes                                                           */
 /* ------------------------------------------------------------------ */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.25; transform: scale(0.8); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 16px 1px var(--pulse-color, oklch(0.6 0.24 22 / 60%)); }
+  50% { box-shadow: 0 0 28px 5px var(--pulse-color, oklch(0.6 0.24 22 / 60%)); }
 }
 
 @keyframes drift {
@@ -145,19 +188,10 @@
   100% { transform: translate3d(-2%, 4%, 0) scale(1.08); }
 }
 
-@keyframes scan {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
-}
-
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes modal-in {
-  from { opacity: 0; transform: translateY(14px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes drift-alt {
+  0% { transform: translate3d(3%, 4%, 0) scale(1.1); }
+  50% { transform: translate3d(-3%, -2%, 0) scale(1.02); }
+  100% { transform: translate3d(2%, -4%, 0) scale(1.12); }
 }
 
 @keyframes status-pop {
@@ -167,18 +201,14 @@
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(24px) scale(0.96); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+  from { opacity: 0; transform: translate(-50%, -16px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
-/* Staggered entrance helper */
-.stagger > * {
-  animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.stagger > *:nth-child(1) { animation-delay: 0.05s; }
-.stagger > *:nth-child(2) { animation-delay: 0.15s; }
-.stagger > *:nth-child(3) { animation-delay: 0.25s; }
-.stagger > *:nth-child(4) { animation-delay: 0.35s; }
 
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -1,0 +1,17 @@
+{
+  "name": "MCPVP // Status — Live Server Monitor",
+  "short_name": "MCPVP Status",
+  "description": "Real-time cyberpunk monitoring terminal for the MCPVP.COM Minecraft server.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050506",
+  "theme_color": "#050506",
+  "icons": [
+    {
+      "src": "/mcpvp-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
