@@ -24,12 +24,15 @@ async function sendDiscordWebhook(webhookUrl: string, previousStatus: string, ne
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       username: "MCPVP Monitor",
+      content: "@everyone",
+      allowed_mentions: { parse: ["everyone"] },
       embeds: [{
         title: "MCPVP.COM STATUS UPDATE",
+        description: `MCPVP.COM status changed from **${previousStatus.replace(/_/g, " ")}** to **${newStatus.replace(/_/g, " ")}**.`,
         color: colors[newStatus] ?? 0xdc2626,
         fields: [
-          { name: "Previous", value: previousStatus.replace(/_/g, " "), inline: true },
-          { name: "Current", value: newStatus.replace(/_/g, " "), inline: true },
+          { name: "Previous Status", value: previousStatus.replace(/_/g, " "), inline: true },
+          { name: "Current Status", value: newStatus.replace(/_/g, " "), inline: true },
           { name: "MOTD", value: motd ? "```" + motd.slice(0, 900) + "```" : "—", inline: false },
         ],
         footer: { text: "MCPVP Live Monitor" },
