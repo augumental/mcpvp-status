@@ -8,9 +8,9 @@
   "theme_color": "#050506",
   "icons": [
     {
-      "src": "/mcpvp-logo.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "/mcpvp-logo.svg",
+      "sizes": "2047x565",
+      "type": "image/svg+xml",
       "purpose": "any"
     }
   ]
