@@ -158,19 +158,18 @@ export function StatusDashboard() {
 
       <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-8">
         <div className="flex items-center gap-3">
-          <div className="relative flex h-11 w-28 items-center overflow-hidden">
+          <div className="relative flex h-11 w-40 shrink-0 items-center">
             <div className="absolute inset-0 -z-10 scale-125 rounded-full bg-[radial-gradient(circle,oklch(0.55_0.22_22/45%),transparent_70%)] blur-md" />
             <Image
               src="/mcpvp-logo.svg"
               alt="MCPVP logo"
               width={2047}
               height={565}
-              className="h-11 w-auto max-w-none object-contain object-left"
+              className="h-11 w-auto object-contain object-left"
               priority
             />
           </div>
           <div className="hidden sm:block">
-            <p className="font-mono text-xs font-bold uppercase tracking-[0.3em] text-foreground">MCPVP</p>
             <p className="font-mono text-[0.65rem] uppercase tracking-[0.25em] text-muted-foreground">
               Live Monitor
             </p>
