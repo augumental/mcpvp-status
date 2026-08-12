@@ -55,14 +55,66 @@ export async function GET(request: Request) {
 
     if (changed) {
       const webhooks = await getEnabledWebhooks()
-      const results = await Promise.allSettled(webhooks.map((url) => sendDiscordWebhook(url, previous.status, result.status, result.motd, timestamp)))
+
+      if (webhooks.length === 0) {
+        return Response.json({
+          ok: true,
+          status: result.status,
+          changed: true,
+          previousStatus: previous.status,
+          webhookCount: 0,
+          webhookFailures: 0,
+          delivered: false,
+          waitingForWebhook: true,
+          checkedAt: result.checkedAt,
+        })
+      }
+
+      const results = await Promise.allSettled(
+        webhooks.map((url) => sendDiscordWebhook(url, previous.status, result.status, result.motd, timestamp)),
+      )
       const failures = results.filter((item) => item.status === "rejected").length
+
+      // Do not advance the persisted status until every enabled webhook has
+      // received the notification. A failed delivery will therefore be retried
+      // on the next scheduled monitor run instead of being silently lost.
+      if (failures > 0) {
+        return Response.json({
+          ok: false,
+          status: result.status,
+          changed: true,
+          previousStatus: previous.status,
+          webhookCount: webhooks.length,
+          webhookFailures: failures,
+          delivered: false,
+          checkedAt: result.checkedAt,
+        }, { status: 502 })
+      }
+
       await setMonitorState({ status: result.status, motd: result.motd, checkedAt: result.checkedAt })
-      return Response.json({ ok: true, status: result.status, changed, previousStatus: previous.status, webhookCount: webhooks.length, webhookFailures: failures, checkedAt: result.checkedAt })
+      return Response.json({
+        ok: true,
+        status: result.status,
+        changed: true,
+        previousStatus: previous.status,
+        webhookCount: webhooks.length,
+        webhookFailures: 0,
+        delivered: true,
+        checkedAt: result.checkedAt,
+      })
     }
 
     await setMonitorState({ status: result.status, motd: result.motd, checkedAt: result.checkedAt })
-    return Response.json({ ok: true, status: result.status, changed, previousStatus: previous?.status ?? null, webhookCount: 0, webhookFailures: 0, checkedAt: result.checkedAt })
+    return Response.json({
+      ok: true,
+      status: result.status,
+      changed: false,
+      previousStatus: previous?.status ?? null,
+      webhookCount: 0,
+      webhookFailures: 0,
+      delivered: false,
+      checkedAt: result.checkedAt,
+    })
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Monitor failed" }, { status: 500 })
   }
