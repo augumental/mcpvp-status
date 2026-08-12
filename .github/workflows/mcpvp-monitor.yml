@@ -22,12 +22,12 @@ jobs:
     steps:
       - name: Check MCPVP status
         env:
-          MONITOR_URL: ${{ secrets.MCPVP_MONITOR_URL }}
+          MONITOR_URL: https://mcpvp-status.vercel.app
           CRON_SECRET: ${{ secrets.MCPVP_CRON_SECRET }}
         run: |
           set -euo pipefail
-          if [ -z "$MONITOR_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "Missing MCPVP_MONITOR_URL or MCPVP_CRON_SECRET repository secret."
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing MCPVP_CRON_SECRET repository secret."
             exit 1
           fi
           curl --fail --silent --show-error --retry 2 --max-time 45 \
