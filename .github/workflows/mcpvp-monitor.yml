@@ -1,0 +1,33 @@
+name: MCPVP Status Monitor
+
+on:
+  schedule:
+    - cron: "7,12,17,22,27,32,37,42,47,52,57 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcpvp-status-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check MCPVP status
+        env:
+          MONITOR_URL: ${{ secrets.MCPVP_MONITOR_URL }}
+          CRON_SECRET: ${{ secrets.MCPVP_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MONITOR_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Missing MCPVP_MONITOR_URL or MCPVP_CRON_SECRET repository secret."
+            exit 1
+          fi
+          curl --fail --silent --show-error --retry 2 --max-time 45 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$MONITOR_URL/api/monitor"
+          echo
