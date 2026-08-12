@@ -1,27 +1,6 @@
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
-const STATE_KEY = "mcpvp:monitor:state"
-
-async function command<T>(args: unknown[]): Promise<T> {
-  if (!REDIS_URL || !REDIS_TOKEN) {
-    throw new Error("Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN")
-  }
-
-  const res = await fetch(REDIS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${REDIS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(args),
-    cache: "no-store",
-  })
-
-  if (!res.ok) throw new Error(`Redis responded ${res.status}`)
-
-  const data = (await res.json()) as { result: T }
-  return data.result
-}
+const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const STATE_ID = 1
 
 export interface MonitorState {
   status: string
@@ -29,15 +8,44 @@ export interface MonitorState {
   checkedAt: string
 }
 
+function getConfig() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
+  }
+  return { url: SUPABASE_URL, key: SUPABASE_SERVICE_ROLE_KEY }
+}
+
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  const { url, key } = getConfig()
+  return fetch(`${url}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+  })
+}
+
 export async function getMonitorState(): Promise<MonitorState | null> {
-  const value = await command<string | null>(["GET", STATE_KEY])
-  return value ? (JSON.parse(value) as MonitorState) : null
+  const res = await request(`mcpvp_monitor_state?id=eq.${STATE_ID}&select=status,motd,checked_at&limit=1`)
+  if (!res.ok) throw new Error(`Supabase responded ${res.status}`)
+  const rows = (await res.json()) as Array<{ status: string; motd: string; checked_at: string }>
+  if (!rows.length || rows[0].status === "UNKNOWN") return null
+  return { status: rows[0].status, motd: rows[0].motd, checkedAt: rows[0].checked_at }
 }
 
 export async function setMonitorState(state: MonitorState): Promise<void> {
-  await command(["SET", STATE_KEY, JSON.stringify(state)])
+  const res = await request("mcpvp_monitor_state?id=eq.1", {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ status: state.status, motd: state.motd, checked_at: state.checkedAt }),
+  })
+  if (!res.ok) throw new Error(`Supabase responded ${res.status}`)
 }
 
 export function hasMonitorStateStore(): boolean {
-  return Boolean(REDIS_URL && REDIS_TOKEN)
+  return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
 }
