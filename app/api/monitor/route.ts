@@ -52,10 +52,9 @@ export async function GET(request: Request) {
     const previous = await getMonitorState()
     const changed = previous !== null && previous.status !== result.status
     const timestamp = new Date().toISOString()
+    const webhooks = await getEnabledWebhooks()
 
     if (changed) {
-      const webhooks = await getEnabledWebhooks()
-
       if (webhooks.length === 0) {
         return Response.json({
           ok: true,
@@ -75,9 +74,6 @@ export async function GET(request: Request) {
       )
       const failures = results.filter((item) => item.status === "rejected").length
 
-      // Do not advance the persisted status until every enabled webhook has
-      // received the notification. A failed delivery will therefore be retried
-      // on the next scheduled monitor run instead of being silently lost.
       if (failures > 0) {
         return Response.json({
           ok: false,
@@ -110,7 +106,7 @@ export async function GET(request: Request) {
       status: result.status,
       changed: false,
       previousStatus: previous?.status ?? null,
-      webhookCount: 0,
+      webhookCount: webhooks.length,
       webhookFailures: 0,
       delivered: false,
       checkedAt: result.checkedAt,
