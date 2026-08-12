@@ -1,5 +1,6 @@
 import { getStatus } from "@/lib/minecraft"
 import { getMonitorState, hasMonitorStateStore, setMonitorState } from "@/lib/monitor-state"
+import { getEnabledWebhooks } from "@/lib/webhooks"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -7,18 +8,17 @@ export const dynamic = "force-dynamic"
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
-  const auth = request.headers.get("authorization")
-  return auth === `Bearer ${secret}`
+  return request.headers.get("authorization") === `Bearer ${secret}`
+}
+
+const COLORS: Record<string, number> = {
+  UNLOCKED: 0x22c55e,
+  SELECTIVE_WHITELIST: 0xeab308,
+  WHITELISTED: 0xdc2626,
+  UNREACHABLE: 0x6b7280,
 }
 
 async function sendDiscordWebhook(webhookUrl: string, previousStatus: string, newStatus: string, motd: string, timestamp: string) {
-  const colors: Record<string, number> = {
-    UNLOCKED: 0x22c55e,
-    SELECTIVE_WHITELIST: 0xeab308,
-    WHITELISTED: 0xdc2626,
-    UNREACHABLE: 0x6b7280,
-  }
-
   const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -29,7 +29,7 @@ async function sendDiscordWebhook(webhookUrl: string, previousStatus: string, ne
       embeds: [{
         title: "MCPVP.COM STATUS UPDATE",
         description: `MCPVP.COM status changed from **${previousStatus.replace(/_/g, " ")}** to **${newStatus.replace(/_/g, " ")}**.`,
-        color: colors[newStatus] ?? 0xdc2626,
+        color: COLORS[newStatus] ?? 0xdc2626,
         fields: [
           { name: "Previous Status", value: previousStatus.replace(/_/g, " "), inline: true },
           { name: "Current Status", value: newStatus.replace(/_/g, " "), inline: true },
@@ -40,7 +40,6 @@ async function sendDiscordWebhook(webhookUrl: string, previousStatus: string, ne
       }],
     }),
   })
-
   if (!res.ok) throw new Error(`Discord responded ${res.status}`)
 }
 
@@ -48,17 +47,23 @@ export async function GET(request: Request) {
   if (!isAuthorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 })
   if (!hasMonitorStateStore()) return Response.json({ error: "Supabase monitor storage is not configured" }, { status: 503 })
 
-  const result = await getStatus()
-  const previous = await getMonitorState()
-  const changed = previous !== null && previous.status !== result.status
-  const timestamp = new Date().toISOString()
+  try {
+    const result = await getStatus()
+    const previous = await getMonitorState()
+    const changed = previous !== null && previous.status !== result.status
+    const timestamp = new Date().toISOString()
 
-  if (changed) {
-    const webhookUrl = process.env.MCPVP_DISCORD_WEBHOOK_URL
-    if (webhookUrl) await sendDiscordWebhook(webhookUrl, previous.status, result.status, result.motd, timestamp)
+    if (changed) {
+      const webhooks = await getEnabledWebhooks()
+      const results = await Promise.allSettled(webhooks.map((url) => sendDiscordWebhook(url, previous.status, result.status, result.motd, timestamp)))
+      const failures = results.filter((item) => item.status === "rejected").length
+      await setMonitorState({ status: result.status, motd: result.motd, checkedAt: result.checkedAt })
+      return Response.json({ ok: true, status: result.status, changed, previousStatus: previous.status, webhookCount: webhooks.length, webhookFailures: failures, checkedAt: result.checkedAt })
+    }
+
+    await setMonitorState({ status: result.status, motd: result.motd, checkedAt: result.checkedAt })
+    return Response.json({ ok: true, status: result.status, changed, previousStatus: previous?.status ?? null, webhookCount: 0, webhookFailures: 0, checkedAt: result.checkedAt })
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Monitor failed" }, { status: 500 })
   }
-
-  await setMonitorState({ status: result.status, motd: result.motd, checkedAt: result.checkedAt })
-
-  return Response.json({ ok: true, status: result.status, changed, previousStatus: previous?.status ?? null, checkedAt: result.checkedAt })
 }
