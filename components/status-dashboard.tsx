@@ -51,12 +51,7 @@ export function StatusDashboard() {
   const [settingsLoaded, setSettingsLoaded] = useState(false)
 
   const prevStatusRef = useRef<ServerStatus | null>(null)
-  const settingsRef = useRef(settings)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    settingsRef.current = settings
-  }, [settings])
 
   useEffect(() => {
     try {
@@ -72,25 +67,6 @@ export function StatusDashboard() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
     } catch {}
   }, [settings, settingsLoaded])
-
-  const sendWebhook = useCallback(
-    (from: ServerStatus | null, to: ServerStatus, motd: string) => {
-      const s = settingsRef.current
-      if (!s.webhookEnabled || !s.webhookUrl) return
-      fetch("/api/webhook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          webhookUrl: s.webhookUrl,
-          previousStatus: from ?? "UNKNOWN",
-          newStatus: to,
-          motd,
-          timestamp: new Date().toISOString(),
-        }),
-      }).catch(() => {})
-    },
-    [],
-  )
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -116,8 +92,7 @@ export function StatusDashboard() {
         if (toastTimer.current) clearTimeout(toastTimer.current)
         toastTimer.current = setTimeout(() => setToast(null), 5000)
 
-        if (settingsRef.current.soundEnabled) playDing()
-        sendWebhook(prev, result.status, result.motd)
+        if (settings.soundEnabled) playDing()
       }
       prevStatusRef.current = result.status
     } catch {
@@ -132,7 +107,7 @@ export function StatusDashboard() {
         players: d?.players,
       }))
     }
-  }, [sendWebhook])
+  }, [settings.soundEnabled])
 
   useEffect(() => {
     fetchStatus()
