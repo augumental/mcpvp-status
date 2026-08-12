@@ -1,28 +1,19 @@
+import { saveWebhook, disableWebhook } from "@/lib/webhooks"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/**
- * POST /api/webhook
- * Server-side proxy that forwards a Discord webhook. The webhook URL is sent
- * from the client (stored only in the user's own browser) and relayed here so
- * that:
- *   - it is never hardcoded into the client bundle / source,
- *   - the request avoids browser CORS restrictions,
- *   - we can validate the target is an actual Discord webhook endpoint.
- *
- * We do NOT persist the webhook URL on the server.
- */
-
 interface WebhookPayload {
   webhookUrl: string
+  clientId?: string
   previousStatus: string
   newStatus: string
   motd: string
   timestamp: string
   test?: boolean
+  enabled?: boolean
 }
 
-// Only allow real Discord webhook hosts to prevent SSRF abuse.
 function isValidDiscordWebhook(url: string): boolean {
   try {
     const parsed = new URL(url)
@@ -52,27 +43,28 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { webhookUrl, previousStatus, newStatus, motd, timestamp, test } = body
+  const { webhookUrl, clientId, previousStatus, newStatus, motd, timestamp, test, enabled = true } = body
 
+  if (!clientId || !/^[a-zA-Z0-9_-]{16,128}$/.test(clientId)) {
+    return Response.json({ error: "Invalid client ID" }, { status: 400 })
+  }
   if (!webhookUrl || !isValidDiscordWebhook(webhookUrl)) {
     return Response.json({ error: "Invalid Discord webhook URL" }, { status: 400 })
   }
 
   const discordPayload = {
     username: "MCPVP Monitor",
-    embeds: [
-      {
-        title: test ? "MCPVP.COM — TEST NOTIFICATION" : "MCPVP.COM STATUS UPDATE",
-        color: STATUS_COLORS[newStatus] ?? 0xdc2626,
-        fields: [
-          { name: "Previous", value: pretty(previousStatus || "—"), inline: true },
-          { name: "Current", value: pretty(newStatus || "—"), inline: true },
-          { name: "MOTD", value: motd ? "```" + motd.slice(0, 900) + "```" : "—", inline: false },
-        ],
-        footer: { text: "MCPVP Live Monitor" },
-        timestamp: timestamp || new Date().toISOString(),
-      },
-    ],
+    embeds: [{
+      title: test ? "MCPVP.COM — TEST NOTIFICATION" : "MCPVP.COM STATUS UPDATE",
+      color: STATUS_COLORS[newStatus] ?? 0xdc2626,
+      fields: [
+        { name: "Previous", value: pretty(previousStatus || "—"), inline: true },
+        { name: "Current", value: pretty(newStatus || "—"), inline: true },
+        { name: "MOTD", value: motd ? "```" + motd.slice(0, 900) + "```" : "—", inline: false },
+      ],
+      footer: { text: "MCPVP Live Monitor" },
+      timestamp: timestamp || new Date().toISOString(),
+    }],
   }
 
   try {
@@ -81,17 +73,14 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(discordPayload),
     })
-
     if (!res.ok) {
       const text = await res.text()
       return Response.json({ error: `Discord responded ${res.status}`, detail: text.slice(0, 200) }, { status: 502 })
     }
-
+    if (enabled) await saveWebhook(clientId, webhookUrl)
+    else await disableWebhook(clientId)
     return Response.json({ ok: true })
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Failed to send webhook" },
-      { status: 502 },
-    )
+    return Response.json({ error: error instanceof Error ? error.message : "Failed to send webhook" }, { status: 502 })
   }
 }
