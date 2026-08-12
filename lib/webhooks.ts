@@ -1,9 +1,13 @@
-const SUPABASE_URL = process.env.SUPABASE_URL
+const SUPABASE_URL = process.env.SUPABASE_URL || "https://cluxuiqkcnzhtxvnjjqs.supabase.co"
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 function getConfig() {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
+  if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY")
   return { url: SUPABASE_URL, key: SUPABASE_SERVICE_ROLE_KEY }
+}
+
+function encodeFilterValue(value: string) {
+  return encodeURIComponent(value)
 }
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
@@ -31,7 +35,7 @@ async function supabaseError(res: Response): Promise<string> {
 }
 
 export async function saveWebhook(clientId: string, webhookUrl: string): Promise<void> {
-  const res = await request("webhook_configs?on_conflict=client_id", {
+  const res = await request("webhook_configs", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify({ client_id: clientId, webhook_url: webhookUrl, enabled: true }),
@@ -40,7 +44,7 @@ export async function saveWebhook(clientId: string, webhookUrl: string): Promise
 }
 
 export async function disableWebhook(clientId: string): Promise<void> {
-  const res = await request(`webhook_configs?client_id=eq.${encodeURIComponent(clientId)}`, {
+  const res = await request(`webhook_configs?client_id=eq.${encodeFilterValue(clientId)}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ enabled: false }),
@@ -49,8 +53,8 @@ export async function disableWebhook(clientId: string): Promise<void> {
 }
 
 export async function getEnabledWebhooks(): Promise<string[]> {
-  const res = await request("webhook_configs?enabled=eq.true&select=webhook_url")
+  const res = await request("webhook_configs?select=webhook_url&enabled=is.true")
   if (!res.ok) throw new Error(`Supabase responded ${res.status}: ${await supabaseError(res)}`)
   const rows = (await res.json()) as Array<{ webhook_url: string }>
-  return [...new Set(rows.map((row) => row.webhook_url).filter(Boolean))]
+  return [...new Set(rows.map((row) => row.webhook_url).filter((url): url is string => typeof url === "string" && url.length > 0))]
 }
