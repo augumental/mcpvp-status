@@ -1,5 +1,4 @@
 import { getStatus } from "@/lib/minecraft"
-import { getMonitorState, hasMonitorStateStore, setMonitorState } from "@/lib/monitor-state"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -28,10 +27,12 @@ async function sendDiscordWebhook(webhookUrl: string, previousStatus: string, ne
       allowed_mentions: { parse: ["everyone"] },
       embeds: [{
         title: "MCPVP.COM STATUS UPDATE",
-        description: `MCPVP.COM status changed from **${previousStatus.replace(/_/g, " ")}** to **${newStatus.replace(/_/g, " ")}**.`,
+        description: previousStatus
+          ? `MCPVP.COM status changed from **${previousStatus.replace(/_/g, " ")}** to **${newStatus.replace(/_/g, " ")}**.`
+          : `MCPVP.COM current status is **${newStatus.replace(/_/g, " ")}**.`,
         color: colors[newStatus] ?? 0xdc2626,
         fields: [
-          { name: "Previous Status", value: previousStatus.replace(/_/g, " "), inline: true },
+          ...(previousStatus ? [{ name: "Previous Status", value: previousStatus.replace(/_/g, " "), inline: true }] : []),
           { name: "Current Status", value: newStatus.replace(/_/g, " "), inline: true },
           { name: "MOTD", value: motd ? "```" + motd.slice(0, 900) + "```" : "—", inline: false },
         ],
@@ -46,21 +47,16 @@ async function sendDiscordWebhook(webhookUrl: string, previousStatus: string, ne
 
 export async function GET(request: Request) {
   if (!isAuthorized(request)) return Response.json({ error: "Unauthorized" }, { status: 401 })
-  if (!hasMonitorStateStore()) {
-    return Response.json({ error: "Persistent monitor storage is not configured" }, { status: 503 })
-  }
 
   const result = await getStatus()
-  const previous = await getMonitorState()
-  const changed = previous !== null && previous.status !== result.status
+  const previousStatus = new URL(request.url).searchParams.get("previousStatus") ?? ""
+  const changed = Boolean(previousStatus) && previousStatus !== result.status
   const timestamp = new Date().toISOString()
 
   if (changed) {
     const webhookUrl = process.env.MCPVP_DISCORD_WEBHOOK_URL
-    if (webhookUrl) await sendDiscordWebhook(webhookUrl, previous.status, result.status, result.motd, timestamp)
+    if (webhookUrl) await sendDiscordWebhook(webhookUrl, previousStatus, result.status, result.motd, timestamp)
   }
 
-  await setMonitorState({ status: result.status, motd: result.motd, checkedAt: result.checkedAt })
-
-  return Response.json({ ok: true, status: result.status, changed, previousStatus: previous?.status ?? null, checkedAt: result.checkedAt })
+  return Response.json({ ok: true, status: result.status, changed, previousStatus: previousStatus || null, checkedAt: result.checkedAt })
 }
