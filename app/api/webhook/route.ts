@@ -1,3 +1,4 @@
+import { getStatus } from "@/lib/minecraft"
 import { saveWebhook, disableWebhook } from "@/lib/webhooks"
 
 export const runtime = "nodejs"
@@ -6,10 +7,10 @@ export const dynamic = "force-dynamic"
 interface WebhookPayload {
   webhookUrl: string
   clientId?: string
-  previousStatus: string
-  newStatus: string
-  motd: string
-  timestamp: string
+  previousStatus?: string
+  newStatus?: string
+  motd?: string
+  timestamp?: string
   test?: boolean
   enabled?: boolean
 }
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { webhookUrl, clientId, previousStatus, newStatus, motd, timestamp, test, enabled = true } = body
+  const { webhookUrl, clientId, test, enabled = true } = body
 
   if (!clientId || !/^[a-zA-Z0-9_-]{16,128}$/.test(clientId)) {
     return Response.json({ error: "Invalid client ID" }, { status: 400 })
@@ -52,18 +53,37 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid Discord webhook URL" }, { status: 400 })
   }
 
+  let previousStatus = body.previousStatus || "—"
+  let newStatus = body.newStatus || "UNLOCKED"
+  let motd = body.motd || ""
+  let timestamp = body.timestamp || new Date().toISOString()
+
+  if (test) {
+    try {
+      const current = await getStatus()
+      newStatus = current.status
+      motd = current.motd
+      timestamp = new Date().toISOString()
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "Failed to check MCPVP status" }, { status: 502 })
+    }
+  }
+
   const discordPayload = {
     username: "MCPVP Monitor",
     embeds: [{
       title: test ? "MCPVP.COM — TEST NOTIFICATION" : "MCPVP.COM STATUS UPDATE",
-      color: STATUS_COLORS[newStatus] ?? 0xdc2626,
+      description: test
+        ? `Current MCPVP.COM status: **${pretty(newStatus)}**.`
+        : `MCPVP.COM status changed from **${pretty(previousStatus)}** to **${pretty(newStatus)}**.`,
+      color: STATUS_COLORS[newStatus] ?? 0x6b7280,
       fields: [
-        { name: "Previous", value: pretty(previousStatus || "—"), inline: true },
-        { name: "Current", value: pretty(newStatus || "—"), inline: true },
+        { name: "Previous", value: pretty(previousStatus), inline: true },
+        { name: "Current", value: pretty(newStatus), inline: true },
         { name: "MOTD", value: motd ? "```" + motd.slice(0, 900) + "```" : "—", inline: false },
       ],
       footer: { text: "MCPVP Live Monitor" },
-      timestamp: timestamp || new Date().toISOString(),
+      timestamp,
     }],
   }
 
@@ -79,7 +99,7 @@ export async function POST(request: Request) {
     }
     if (enabled) await saveWebhook(clientId, webhookUrl)
     else await disableWebhook(clientId)
-    return Response.json({ ok: true })
+    return Response.json({ ok: true, status: newStatus })
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Failed to send webhook" }, { status: 502 })
   }
