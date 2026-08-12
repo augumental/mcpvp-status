@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Check MCPVP status
         env:
-          MONITOR_URL: https://mcpvp.wtf
+          MONITOR_URL: https://mcpvp-status.vercel.app
           CRON_SECRET: ${{ secrets.MCPVP_CRON_SECRET }}
         run: |
           set -euo pipefail
