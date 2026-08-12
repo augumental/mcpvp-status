@@ -1,33 +1,35 @@
 # mcpvp-status
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+MCPVP live status monitor built with Next.js.
 
-## Built with v0
+## Server-side Discord monitoring
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+The MCPVP status monitor runs independently of the website UI. A Vercel Cron Job calls `/api/monitor` every minute, checks `mcpvp.com`, compares the result with persistent state, and sends a Discord webhook when the status changes.
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_E4tyegVqBk21qraz1jvvqlLSIkvS)
+The website does **not** need to be open.
 
-## Getting Started
+### Required environment variables
 
-First, run the development server:
+Configure these in the deployment environment:
+
+```text
+CRON_SECRET=your-random-secret
+MCPVP_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+UPSTASH_REDIS_REST_URL=https://your-database.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-upstash-rest-token
+```
+
+`CRON_SECRET` protects the monitor endpoint. `MCPVP_DISCORD_WEBHOOK_URL` is kept server-side and is never exposed to visitors. Upstash Redis stores the last observed status so the previous status survives serverless function restarts.
+
+After adding the variables, redeploy the project. The first scheduled check establishes the initial state and does not send a notification. A later change such as `UNLOCKED -> UNREACHABLE` or `UNREACHABLE -> UNLOCKED` sends one notification.
+
+The existing settings panel can still be used to test a Discord webhook manually, but automatic status-change notifications are now handled entirely by the server-side monitor.
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## Learn More
-
-To learn more, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+Open `http://localhost:3000` to see the monitor.
