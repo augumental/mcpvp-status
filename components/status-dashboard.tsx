@@ -19,7 +19,6 @@ const DEFAULT_SETTINGS: Settings = {
   webhookUrl: "",
 }
 
-// Play a short, subtle "ding" using the Web Audio API (no asset needed).
 function playDing() {
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -37,9 +36,7 @@ function playDing() {
     osc.start()
     osc.stop(ctx.currentTime + 0.5)
     osc.onended = () => ctx.close()
-  } catch {
-    // Ignore audio errors (e.g. autoplay restrictions).
-  }
+  } catch {}
 }
 
 export function StatusDashboard() {
@@ -53,7 +50,6 @@ export function StatusDashboard() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
 
-  // Refs that must stay current inside the polling closure.
   const prevStatusRef = useRef<ServerStatus | null>(null)
   const settingsRef = useRef(settings)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -62,28 +58,21 @@ export function StatusDashboard() {
     settingsRef.current = settings
   }, [settings])
 
-  // --- Load persisted settings once on mount ------------------------------
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) })
-    } catch {
-      /* ignore */
-    }
+    } catch {}
     setSettingsLoaded(true)
   }, [])
 
-  // --- Persist settings on change -----------------------------------------
   useEffect(() => {
     if (!settingsLoaded) return
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }, [settings, settingsLoaded])
 
-  // Fire a Discord webhook (server-side proxy) on real status changes.
   const sendWebhook = useCallback(
     (from: ServerStatus | null, to: ServerStatus, motd: string) => {
       const s = settingsRef.current
@@ -98,14 +87,11 @@ export function StatusDashboard() {
           motd,
           timestamp: new Date().toISOString(),
         }),
-      }).catch(() => {
-        /* best-effort */
-      })
+      }).catch(() => {})
     },
     [],
   )
 
-  // --- Single polling loop (one interval, no overlaps) --------------------
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/status", { cache: "no-store" })
@@ -123,11 +109,7 @@ export function StatusDashboard() {
       )
 
       const prev = prevStatusRef.current
-      // Only react to a genuine change (and never on the very first load).
       if (prev !== null && prev !== result.status) {
-        // Don't fire notifications for transient UNREACHABLE unless it's a
-        // meaningful state we want surfaced — we still show the toast, but
-        // the webhook/sound only fire on actual detected-state changes.
         setChangeKey((k) => k + 1)
         setToast({ from: prev, to: result.status })
 
@@ -140,7 +122,6 @@ export function StatusDashboard() {
       prevStatusRef.current = result.status
     } catch {
       setLoading(false)
-      // Represent a frontend-side fetch failure as UNREACHABLE too.
       setData((d) => ({
         status: "UNREACHABLE",
         motd: "",
@@ -156,7 +137,6 @@ export function StatusDashboard() {
   useEffect(() => {
     fetchStatus()
     const poll = setInterval(fetchStatus, POLL_INTERVAL_MS)
-    // Independent 1s ticker purely for the visible countdown.
     const ticker = setInterval(() => {
       setCountdown((c) => (c > 0 ? c - 1 : 0))
     }, 1000)
@@ -176,18 +156,16 @@ export function StatusDashboard() {
 
       {toast && <StatusToast from={toast.from} to={toast.to} />}
 
-      {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-5 py-5 sm:px-8">
         <div className="flex items-center gap-3">
-          <div className="relative">
-            {/* Subtle red glow behind the logo (does not obscure it) */}
+          <div className="relative flex h-11 w-28 items-center overflow-hidden">
             <div className="absolute inset-0 -z-10 scale-125 rounded-full bg-[radial-gradient(circle,oklch(0.55_0.22_22/45%),transparent_70%)] blur-md" />
             <Image
-              src="/mcpvp-logo.png"
+              src="/mcpvp-logo.svg"
               alt="MCPVP logo"
-              width={44}
-              height={44}
-              className="h-11 w-auto object-contain"
+              width={2047}
+              height={565}
+              className="h-11 w-auto max-w-none object-contain object-left"
               priority
             />
           </div>
@@ -208,7 +186,6 @@ export function StatusDashboard() {
         </button>
       </header>
 
-      {/* Center content */}
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-10 px-5 py-10">
         <StatusHero status={currentStatus} changeKey={changeKey} loading={loading} />
         <MonitorPanel
@@ -219,7 +196,6 @@ export function StatusDashboard() {
         />
       </div>
 
-      {/* Live monitor footer indicator */}
       <footer className="relative z-10 flex items-center justify-center gap-2.5 pb-8 pt-2">
         <span className="relative flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-green opacity-60" />
